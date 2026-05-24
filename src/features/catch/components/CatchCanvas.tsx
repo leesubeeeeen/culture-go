@@ -17,11 +17,7 @@ const TOOLS = {
 const DEMO_CHEAT_100 = true
 const DEFAULT_MAX_HP = 100
 
-const MOCK_AI_IMAGES = [
-  'https://images.unsplash.com/photo-1536680465769-a36969fa7d41?q=80&w=512&auto=format&fit=crop',
-  'https://images.unsplash.com/photo-1563729784474-d77dbb933a9e?q=80&w=512&auto=format&fit=crop',
-  'https://images.unsplash.com/photo-1551024601-bec78aea704b?q=80&w=512&auto=format&fit=crop',
-]
+const EVOLVED_MONSTER = { name: '말차튀소용용', imageUrl: '/monsters/말차튀소용용.jpg' }
 
 type Phase = 'fighting' | 'judging' | 'caught' | 'fled' | 'fusion_ready' | 'fusing' | 'fusion_complete'
 
@@ -104,13 +100,6 @@ export default function CatchCanvas({
     }
   }
 
-  const generateLegendImageMock = async (): Promise<string> => {
-    setFusionLog('AI가 전설의 비주얼을 실시간 렌더링 중... 🎨')
-    await new Promise((resolve) => setTimeout(resolve, 1200))
-    const randomIndex = Math.floor(Math.random() * MOCK_AI_IMAGES.length)
-    return MOCK_AI_IMAGES[randomIndex]
-  }
-
   // 🎯 [핵심 수식] 포획 성공 판정 시 카운트 체크 및 즉시 융합 분기점
   const checkFusionTrigger = async () => {
     if (!monster.name.includes('튀소')) {
@@ -125,7 +114,7 @@ export default function CatchCanvas({
 
     console.log(`현재 포획 스택: ${currentCatchCount}마리`)
 
-    if (currentCatchCount >= 5) {
+    if (currentCatchCount >= 3) {
       setPhase('fusion_ready')
     } else {
       await saveToInventory(monster)
@@ -134,16 +123,14 @@ export default function CatchCanvas({
     }
   }
 
-  // 🍵 [화면 내 실시간 융합 실행 및 말차튀소 도감 최종 박기]
   const executeFusion = async () => {
     if (isSaving.current) return
     isSaving.current = true
-    
+
     setPhase('fusing')
     const monsterRaw = monster as any
-    
+
     setTimeout(() => setFusionLog('포획한 튀소 조각들을 정렬하는 중... ✨'), 500)
-    const aiImagePromise = generateLegendImageMock()
 
     try {
       const q = query(
@@ -158,32 +145,24 @@ export default function CatchCanvas({
         await updateDoc(docRef, { count: 0, isFused: true })
       }
 
-      const mockedImageUrl = await aiImagePromise
+      await new Promise((r) => setTimeout(r, 1200))
 
       await addDoc(collection(db, 'user_inventory'), {
         userId: currentUserId,
-        monsterName: '말차튀소',
+        monsterName: EVOLVED_MONSTER.name,
         category: '빵',
-        monsterImageUrl: mockedImageUrl, 
-        imageUrl: mockedImageUrl, 
-        monsterImage: mockedImageUrl,
+        monsterImageUrl: EVOLVED_MONSTER.imageUrl,
+        imageUrl: EVOLVED_MONSTER.imageUrl,
         count: 1,
         isFused: false,
         shopId: monsterRaw.shopId || 'shop_sungsimdang',
         shopName: monsterRaw.shopName || '성심당 본점',
-        capturedAt: new Date()
+        capturedAt: new Date(),
       })
 
       sessionStorage.removeItem('DEMO_TOWISO_COUNT')
-      
-      onCaptured({
-        ...monster,
-        name: '말차튀소',
-        imageUrl: mockedImageUrl
-      })
-
+      onCaptured({ ...monster, name: EVOLVED_MONSTER.name, imageUrl: EVOLVED_MONSTER.imageUrl })
       setPhase('fusion_complete')
-
     } catch (error) {
       console.error('융합 도감 갱신 에러:', error)
       sessionStorage.removeItem('DEMO_TOWISO_COUNT')
@@ -293,10 +272,10 @@ export default function CatchCanvas({
             <p className="text-xl font-black text-yellow-300 mb-2">3마리 포획 완료! 공명 감지</p>
             <p className="text-sm text-gray-300 mb-4">
               방금 잡은 개체를 포함해 총 <span className="text-amber-400 font-bold">3마리</span>가 모였습니다.<br/>
-              도감으로 가기 전, 여기서 즉시 <span className="text-green-400 font-bold">말차튀소</span>로 결합하겠습니까?
+              도감으로 가기 전, 여기서 즉시 <span className="text-green-400 font-bold">말차튀소용</span>로 결합하겠습니까?
             </p>
             <button onClick={executeFusion} className="w-full bg-gradient-to-r from-yellow-400 to-amber-500 text-slate-950 font-black py-3.5 rounded-xl text-base shadow-lg">
-              🍵 즉시 말차튀소로 융합하기!
+              🍵 즉시 말차튀소용로 융합하기!
             </button>
           </div>
         )}
@@ -310,10 +289,10 @@ export default function CatchCanvas({
 
         {phase === 'fusion_complete' && (
           <div className="bg-gradient-to-b from-slate-900 to-green-950 text-white rounded-2xl p-6 border-2 border-green-400 shadow-2xl">
-            <h3 className="text-2xl font-black text-green-400 mb-1">🍵 말차튀소 진화 성공! 🍵</h3>
+            <h3 className="text-2xl font-black text-green-400 mb-1">🍵 말차튀소용 진화 성공! 🍵</h3>
             <p className="text-xs text-gray-400 mb-4">성심당 구역 한정판 레어 소보로 몬스터</p>
             <div className="bg-black/40 rounded-xl py-3.5 mb-5 border border-green-900/50 px-3 text-sm text-gray-300">
-              튀소용 3마리가 하나로 합쳐져 <span className="text-green-400 font-bold">말차튀소 1마리</span>로 도감에 영구 저장되었습니다!
+              튀소용 3마리가 하나로 합쳐져 <span className="text-green-400 font-bold">말차튀소용 1마리</span>로 도감에 영구 저장되었습니다!
             </div>
             <button onClick={onClose} className="bg-green-400 text-slate-950 font-black px-8 py-3 rounded-xl w-full text-base">
               도감함에서 확인하기

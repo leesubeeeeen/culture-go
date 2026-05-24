@@ -22,7 +22,7 @@ const DUMMY_MONSTER: Monster = {
   lat: 36.3278,
   lng: 127.4275,
   status: 'approved', // 🛠️ [빨간줄 해결] 'active'를 규칙에 맞는 'approved'로 수정!
-  imageUrl: 'https://em-content.zobj.net/source/apple/391/doughnut_1f369.png',
+  imageUrl: '/monsters/튀소용.png',
 }
 
 export default function ArCatchPage() {

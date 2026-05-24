@@ -2,6 +2,9 @@ import { useState } from 'react'
 import { addDoc, collection, serverTimestamp } from 'firebase/firestore'
 import { db } from '../../../config/firebase'
 
+const DEMO_IMAGE_URL = '/monsters/튀소용.png'
+const DEMO_MONSTER_NAME = '튀소용'
+
 interface MonsterResult {
   id: string
   name: string
@@ -34,7 +37,6 @@ const RARITY_KO: Record<string, string> = {
 const STEPS = ['generating', 'imaging', 'nuking', 'saving'] as const
 
 // ── 몬스터 설정 로직 ────────────────────────────────────────────
-const SUFFIXES = ['몬', '령', '귀', '수', '신', '정', '왕', '마']
 const RARITIES: MonsterResult['rarity'][] = ['common', 'rare', 'epic', 'legendary']
 const RARITY_WEIGHTS = [50, 30, 15, 5]
 
@@ -66,10 +68,6 @@ function pickRarity(): MonsterResult['rarity'] {
   return 'common'
 }
 
-function buildName(menu: string, shopName: string): string {
-  const base = (menu.trim().split(/[,\s]/)[0] || shopName).replace(/\s/g, '').slice(0, 3)
-  return base + SUFFIXES[Math.floor(Math.random() * SUFFIXES.length)]
-}
 
 const DESCRIPTIONS: Record<string, string[]> = {
   달콤:   ['달콤한 기운을 뿜으며 행인을 꾀어들이는 몬스터.', '설탕 결정으로 된 날개를 가진 귀여운 존재.'],
@@ -80,46 +78,6 @@ const DESCRIPTIONS: Record<string, string[]> = {
   바삭:   ['황금빛 갑옷을 두른 바삭한 몬스터.', '튀김옷 방어막으로 공격을 튕겨내는 몬스터.'],
 }
 
-// ── DALL-E 3 이미지 생성 ─────────────────────────────────────────
-const ATTR_PROMPT: Record<string, string> = {
-  달콤:   'sweet candy crystalline wings, pastel pink and yellow, adorable chibi style',
-  불:     'flaming red-orange body, fire breath, fierce warrior, glowing ember eyes',
-  전통:   'ancient Korean hanbok armor, jade green and gold, noble guardian style',
-  매운맛: 'spicy red chili themed, fiery capsaicin crystals, intense red and orange',
-  물:     'water droplet body, shimmering blue scales, serene ocean style',
-  바삭:   'golden crispy armor plating, warm golden-brown, crunchy texture appearance',
-}
-
-async function generateMonsterImage(params: {
-  name: string
-  attribute: string
-  menu: string
-  shopName: string
-}): Promise<string> {
-  const apiKey = import.meta.env.VITE_OPENAI_API_KEY
-  if (!apiKey) throw new Error('VITE_OPENAI_API_KEY가 설정되지 않았습니다')
-
-  const attrDesc = ATTR_PROMPT[params.attribute] ?? 'mysterious elemental powers, vibrant fantasy colors'
-  const prompt = [
-    `A cute chibi fantasy monster character for a Korean food culture game.`,
-    `Monster name: "${params.name}". Attribute: ${params.attribute}.`,
-    `Visual style: ${attrDesc}.`,
-    `Inspired by "${params.menu}" from Korean shop "${params.shopName}".`,
-    `Full body, centered, plain white background, bright vibrant colors, high-quality digital illustration.`,
-  ].join(' ')
-
-  const res = await fetch('https://api.openai.com/v1/images/generations', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
-    body: JSON.stringify({ model: 'dall-e-3', prompt, n: 1, size: '1024x1024', quality: 'standard' }),
-  })
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}))
-    throw new Error((err as { error?: { message?: string } })?.error?.message ?? `이미지 생성 실패 (${res.status})`)
-  }
-  const data = await res.json() as { data: { url: string }[] }
-  return data.data[0].url
-}
 
 const delay = (ms: number) => new Promise<void>((r) => setTimeout(r, ms))
 
@@ -146,23 +104,17 @@ export default function MonsterRequestScreen({ shopId, shopName, category, lat, 
 
     // 1. 몬스터 설정 생성 (즉시)
     setStep('generating')
-    const name      = buildName(menu, shopName)
+    const name      = DEMO_MONSTER_NAME
     const attribute = pickAttribute([menu, feature, keyword])
     const rarity    = pickRarity()
     const descPool  = DESCRIPTIONS[attribute] ?? ['충청도의 기운을 품은 신비로운 몬스터.']
     const description = descPool[Math.floor(Math.random() * descPool.length)]
     await delay(600)
 
-    // 2. DALL-E 3 이미지 생성
+    // 2. 데모 이미지 사용
     setStep('imaging')
-    let imageUrl: string
-    try {
-      imageUrl = await generateMonsterImage({ name, attribute, menu, shopName })
-    } catch (e) {
-      setError(e instanceof Error ? e.message : '이미지 생성 실패')
-      setStep('error')
-      return
-    }
+    const imageUrl: string = DEMO_IMAGE_URL
+    await delay(800)
 
     setStep('nuking'); await delay(500)
 

@@ -16,7 +16,7 @@ export default function UserMainMap() {
     const testMonster: Monster = {
       id: 'test_monster_cnu',
       name: '튀소용', // 🎯 캔버스의 진화 트리거와 정확히 매치되도록 이름을 '튀소용'으로 고정!
-      imageUrl: 'https://images.unsplash.com/photo-1578632767115-351597cf2477?w=200', 
+      imageUrl: '/monsters/튀소용.png',
       category: '빵몬스터',
       shopId: 'shop_sungsimdang',
       lat: CNU_ENG_5.lat,  

@@ -12,6 +12,10 @@ type Tab = 'monsters' | 'coupons'
 
 const FUSION_REQUIRED = 3
 
+const EVOLUTION_MAP: Record<string, { name: string; imageUrl: string }> = {
+  '튀소용': { name: '말차튀소용', imageUrl: '/monsters/말차튀소용.jpg' },
+}
+
 interface InventoryGroup {
   monsterId: string
   monsterName: string
@@ -99,20 +103,36 @@ export default function InventoryPage() {
     if (group.totalCount < FUSION_REQUIRED || fusingId) return
     setFusingId(group.monsterId)
     try {
-      await addDoc(collection(db, 'coupons'), {
-        userId,
-        shopId: group.shopId,
-        shopName: group.shopName || '상점',
-        title: `${group.monsterName} 융합 쿠폰 — 특별 할인`,
-        category: group.category,
-        isUsed: false,
-        createdAt: serverTimestamp(),
-      })
+      const evolved = EVOLUTION_MAP[group.monsterName]
+      if (evolved) {
+        await addDoc(collection(db, 'user_inventory'), {
+          userId,
+          monsterName: evolved.name,
+          monsterImageUrl: evolved.imageUrl,
+          imageUrl: evolved.imageUrl,
+          category: group.category,
+          shopId: group.shopId,
+          shopName: group.shopName || '상점',
+          count: 1,
+          isFused: false,
+          capturedAt: new Date(),
+        })
+      } else {
+        await addDoc(collection(db, 'coupons'), {
+          userId,
+          shopId: group.shopId,
+          shopName: group.shopName || '상점',
+          title: `${group.monsterName} 융합 쿠폰 — 특별 할인`,
+          category: group.category,
+          isUsed: false,
+          createdAt: serverTimestamp(),
+        })
+      }
       // 그룹의 미융합 doc 전부 isFused=true 처리 → 카드에서 사라짐
       await Promise.all(
         group.unfusedDocIds.map((id) => updateDoc(doc(db, 'user_inventory', id), { isFused: true }))
       )
-      setTab('coupons')
+      setTab(evolved ? 'monsters' : 'coupons')
     } catch (err) {
       console.error('fusion error', err)
       alert('융합 중 오류가 발생했습니다.')
