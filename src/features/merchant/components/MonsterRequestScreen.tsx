@@ -1,4 +1,6 @@
 import { useState } from 'react'
+import { addDoc, collection, serverTimestamp } from 'firebase/firestore'
+import { db } from '../../../config/firebase'
 
 interface MonsterResult {
   id: string
@@ -13,7 +15,7 @@ type Step = 'idle' | 'generating' | 'imaging' | 'nuking' | 'saving' | 'done' | '
 
 const STEP_INFO: Record<string, { label: string; sub: string }> = {
   generating: { label: '🧠 몬스터 설정 생성 중', sub: 'GPT가 가게 특성을 분석합니다' },
-  imaging:    { label: '🎨 이미지 생성 중',      sub: '약 20~60초 소요됩니다 (무료 AI)' },
+  imaging:    { label: '🎨 이미지 생성 중',      sub: 'DALL-E 3로 생성 중입니다 (20~60초)' },
   nuking:     { label: '✂️ 배경 제거(누끼) 중',   sub: '투명 배경 PNG로 변환합니다' },
   saving:     { label: '💾 저장 중',              sub: '마무리 작업 중입니다' },
 }
@@ -78,11 +80,45 @@ const DESCRIPTIONS: Record<string, string[]> = {
   바삭:   ['황금빛 갑옷을 두른 바삭한 몬스터.', '튀김옷 방어막으로 공격을 튕겨내는 몬스터.'],
 }
 
-// ── 데모용 목업 이미지 ────────────────────────────────────────────
-const MOCK_IMAGE_URL = '/monsters/mock.png'
+// ── DALL-E 3 이미지 생성 ─────────────────────────────────────────
+const ATTR_PROMPT: Record<string, string> = {
+  달콤:   'sweet candy crystalline wings, pastel pink and yellow, adorable chibi style',
+  불:     'flaming red-orange body, fire breath, fierce warrior, glowing ember eyes',
+  전통:   'ancient Korean hanbok armor, jade green and gold, noble guardian style',
+  매운맛: 'spicy red chili themed, fiery capsaicin crystals, intense red and orange',
+  물:     'water droplet body, shimmering blue scales, serene ocean style',
+  바삭:   'golden crispy armor plating, warm golden-brown, crunchy texture appearance',
+}
 
-async function generateImage(): Promise<string> {
-  return MOCK_IMAGE_URL
+async function generateMonsterImage(params: {
+  name: string
+  attribute: string
+  menu: string
+  shopName: string
+}): Promise<string> {
+  const apiKey = import.meta.env.VITE_OPENAI_API_KEY
+  if (!apiKey) throw new Error('VITE_OPENAI_API_KEY가 설정되지 않았습니다')
+
+  const attrDesc = ATTR_PROMPT[params.attribute] ?? 'mysterious elemental powers, vibrant fantasy colors'
+  const prompt = [
+    `A cute chibi fantasy monster character for a Korean food culture game.`,
+    `Monster name: "${params.name}". Attribute: ${params.attribute}.`,
+    `Visual style: ${attrDesc}.`,
+    `Inspired by "${params.menu}" from Korean shop "${params.shopName}".`,
+    `Full body, centered, plain white background, bright vibrant colors, high-quality digital illustration.`,
+  ].join(' ')
+
+  const res = await fetch('https://api.openai.com/v1/images/generations', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
+    body: JSON.stringify({ model: 'dall-e-3', prompt, n: 1, size: '1024x1024', quality: 'standard' }),
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}))
+    throw new Error((err as { error?: { message?: string } })?.error?.message ?? `이미지 생성 실패 (${res.status})`)
+  }
+  const data = await res.json() as { data: { url: string }[] }
+  return data.data[0].url
 }
 
 const delay = (ms: number) => new Promise<void>((r) => setTimeout(r, ms))
@@ -96,7 +132,7 @@ interface Props {
   lng: number
 }
 
-export default function MonsterRequestScreen({ shopName, category }: Props) {
+export default function MonsterRequestScreen({ shopId, shopName, category, lat, lng }: Props) {
   const [menu, setMenu]       = useState('')
   const [feature, setFeature] = useState('')
   const [keyword, setKeyword] = useState('')
@@ -117,11 +153,11 @@ export default function MonsterRequestScreen({ shopName, category }: Props) {
     const description = descPool[Math.floor(Math.random() * descPool.length)]
     await delay(600)
 
-    // 2. OpenAI 이미지 생성 (실제 API 호출)
+    // 2. DALL-E 3 이미지 생성
     setStep('imaging')
     let imageUrl: string
     try {
-      imageUrl = await generateImage()
+      imageUrl = await generateMonsterImage({ name, attribute, menu, shopName })
     } catch (e) {
       setError(e instanceof Error ? e.message : '이미지 생성 실패')
       setStep('error')
@@ -129,9 +165,32 @@ export default function MonsterRequestScreen({ shopName, category }: Props) {
     }
 
     setStep('nuking'); await delay(500)
-    setStep('saving'); await delay(400)
 
-    setMonster({ id: `monster_${Date.now()}`, name, description, attribute, rarity, imageUrl })
+    // 3. Firestore monsters 컬렉션에 저장
+    setStep('saving')
+    let monsterId = `monster_${Date.now()}`
+    try {
+      const docRef = await addDoc(collection(db, 'monsters'), {
+        shopId,
+        name,
+        category,
+        lat,
+        lng,
+        status: 'approved',
+        imageUrl,
+        rarity,
+        attribute,
+        description,
+        createdAt: serverTimestamp(),
+      })
+      monsterId = docRef.id
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Firestore 저장 실패')
+      setStep('error')
+      return
+    }
+
+    setMonster({ id: monsterId, name, description, attribute, rarity, imageUrl })
     setStep('done')
     setShowPopup(true)
   }
