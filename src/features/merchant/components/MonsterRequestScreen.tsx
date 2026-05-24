@@ -1,9 +1,6 @@
 import { useState } from 'react'
-import { addDoc, collection, serverTimestamp } from 'firebase/firestore'
+import { collection, addDoc } from 'firebase/firestore'
 import { db } from '../../../config/firebase'
-
-const DEMO_IMAGE_URL = '/monsters/튀소용.png'
-const DEMO_MONSTER_NAME = '튀소용'
 
 interface MonsterResult {
   id: string
@@ -18,7 +15,7 @@ type Step = 'idle' | 'generating' | 'imaging' | 'nuking' | 'saving' | 'done' | '
 
 const STEP_INFO: Record<string, { label: string; sub: string }> = {
   generating: { label: '🧠 몬스터 설정 생성 중', sub: 'GPT가 가게 특성을 분석합니다' },
-  imaging:    { label: '🎨 이미지 생성 중',      sub: 'DALL-E 3로 생성 중입니다 (20~60초)' },
+  imaging:    { label: '🎨 이미지 생성 중',      sub: '약 20~60초 소요됩니다 (무료 AI)' },
   nuking:     { label: '✂️ 배경 제거(누끼) 중',   sub: '투명 배경 PNG로 변환합니다' },
   saving:     { label: '💾 저장 중',              sub: '마무리 작업 중입니다' },
 }
@@ -78,6 +75,10 @@ const DESCRIPTIONS: Record<string, string[]> = {
   바삭:   ['황금빛 갑옷을 두른 바삭한 몬스터.', '튀김옷 방어막으로 공격을 튕겨내는 몬스터.'],
 }
 
+// ── 데모용 목업 이미지 ────────────────────────────────────────────
+async function generateImage(): Promise<string> {
+  return '/monsters/튀소용.png'
+}
 
 const delay = (ms: number) => new Promise<void>((r) => setTimeout(r, ms))
 
@@ -104,45 +105,49 @@ export default function MonsterRequestScreen({ shopId, shopName, category, lat, 
 
     // 1. 몬스터 설정 생성 (즉시)
     setStep('generating')
-    const name      = DEMO_MONSTER_NAME
+    const name      = '튀소용'
     const attribute = pickAttribute([menu, feature, keyword])
     const rarity    = pickRarity()
     const descPool  = DESCRIPTIONS[attribute] ?? ['충청도의 기운을 품은 신비로운 몬스터.']
     const description = descPool[Math.floor(Math.random() * descPool.length)]
     await delay(600)
 
-    // 2. 데모 이미지 사용
+    // 2. OpenAI 이미지 생성 (실제 API 호출)
     setStep('imaging')
-    const imageUrl: string = DEMO_IMAGE_URL
-    await delay(800)
-
-    setStep('nuking'); await delay(500)
-
-    // 3. Firestore monsters 컬렉션에 저장
-    setStep('saving')
-    let monsterId = `monster_${Date.now()}`
+    let imageUrl: string
     try {
-      const docRef = await addDoc(collection(db, 'monsters'), {
-        shopId,
-        name,
-        category,
-        lat,
-        lng,
-        status: 'approved',
-        imageUrl,
-        rarity,
-        attribute,
-        description,
-        createdAt: serverTimestamp(),
-      })
-      monsterId = docRef.id
+      imageUrl = await generateImage()
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Firestore 저장 실패')
+      setError(e instanceof Error ? e.message : '이미지 생성 실패')
       setStep('error')
       return
     }
 
-    setMonster({ id: monsterId, name, description, attribute, rarity, imageUrl })
+    setStep('nuking'); await delay(500)
+    setStep('saving')
+
+    let savedId = `monster_${Date.now()}`
+    try {
+      const ref = await addDoc(collection(db, 'Monster'), {
+        shopId,
+        shopName,
+        category,
+        lat,
+        lng,
+        name,
+        description,
+        attribute,
+        rarity,
+        imageUrl,
+        status: 'approved',
+        couponTemplateId: null,
+      })
+      savedId = ref.id
+    } catch (e) {
+      console.error('Monster 저장 실패:', e)
+    }
+
+    setMonster({ id: savedId, name, description, attribute, rarity, imageUrl })
     setStep('done')
     setShowPopup(true)
   }

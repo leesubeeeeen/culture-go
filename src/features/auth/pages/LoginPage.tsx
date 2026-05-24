@@ -39,8 +39,13 @@ export default function LoginPage() {
     setError(null)
     setLoading(true)
     try {
-      await signInWithEmailAndPassword(auth, email, password)
-      navigate('/', { replace: true })
+      const result = await signInWithEmailAndPassword(auth, email, password)
+      const snap = await getDoc(doc(db, 'users', result.user.uid))
+      if (!snap.exists()) {
+        navigate('/signup', { replace: true })
+      } else {
+        navigate('/', { replace: true })
+      }
     } catch (err) {
       setError(getErrorMsg((err as { code?: string }).code ?? ''))
     } finally {

@@ -1,93 +1,161 @@
-
-
-
-
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { collection, query, where, getDocs, doc, updateDoc, addDoc, limit } from 'firebase/firestore'
+import { db } from '../../../config/firebase'
 import CameraPreview from '../../../components/CameraPreview'
 import CatchCanvas from '../components/CatchCanvas'
+import ToolSelector, { type ToolKey } from '../components/ToolSelector'
 import type { Monster } from '../../../types'
+import { getUserId } from '../../../utils/userId'
 
-/**
- * [B 영역] AR 포획 페이지 (/catch)
- * 지도의 바텀시트에서 넘어온 진짜 AI 몬스터 정보를 세션에서 꺼내어 매핑합니다.
- * 정보가 없을 경우를 대비해 타입 안정성이 확보된 approved 더미 몬스터를 폴백으로 유지합니다.
- */
-
-const DUMMY_MONSTER: Monster = {
-  id: 'monster_demo_1',
-  shopId: 'shop_sungsimdang',
-  name: '튀소용',
-  category: '빵',
-  lat: 36.3278,
-  lng: 127.4275,
-  status: 'approved', // 🛠️ [빨간줄 해결] 'active'를 규칙에 맞는 'approved'로 수정!
-  imageUrl: '/monsters/튀소용.png',
-}
+type PagePhase = 'loading' | 'selecting' | 'catching'
 
 export default function ArCatchPage() {
   const navigate = useNavigate()
-  const [monster, setMonster] = useState<Monster>(DUMMY_MONSTER)
+  const [monster, setMonster]     = useState<Monster | null>(null)
+  const [toolKey, setToolKey]     = useState<ToolKey>('basicNet')
+  const [pagePhase, setPagePhase] = useState<PagePhase>('loading')
+  const isSaving = useRef(false)
 
-  // 🎯 [실시간 지도 연동] 지도가 세션에 구워준 진짜 몬스터(AI 이미지 포함)를 꺼내옵니다.
   useEffect(() => {
-    const sessionTarget = sessionStorage.getItem('catchTarget')
-    if (sessionTarget) {
+    const loadMonster = async () => {
+      // 1. sessionStorage에서 지도에서 선택한 몬스터 복원
+      const raw = sessionStorage.getItem('catchTarget')
+      if (raw) {
+        try {
+          const p = JSON.parse(raw)
+          if (p.id && p.name && p.imageUrl) {
+            setMonster({
+              id:       p.id,
+              shopId:   p.shopId   ?? '',
+              shopName: p.shopName ?? '',
+              name:     p.name,
+              category: p.category ?? '',
+              lat:      p.lat      ?? 0,
+              lng:      p.lng      ?? 0,
+              status:   'approved',
+              imageUrl: p.imageUrl,
+            })
+            setPagePhase('selecting')
+            return
+          }
+        } catch { /* 파싱 실패 → Firestore fallback */ }
+      }
+
+      // 2. 세션 없으면 Firestore에서 approved 몬스터 1마리 fetch
       try {
-        const parsed = JSON.parse(sessionTarget)
-        // 친구의 타입과 내 CatchCanvas의 데이터 규격을 완벽하게 동기화
-        setMonster({
-          id: parsed.id,
-          shopId: parsed.shopId || 'shop_sungsimdang',
-          name: parsed.name,
-          category: parsed.category,
-          lat: parsed.lat || 36.3278,
-          lng: parsed.lng || 127.4275,
-          status: 'approved',
-          imageUrl: parsed.imageUrl
-        })
-      } catch (e) {
-        console.error('세션 데이터 파싱 실패, 더미로 구동합니다:', e)
+        const snap = await getDocs(
+          query(collection(db, 'Monster'), where('status', '==', 'approved'), limit(10))
+        )
+        const valid = snap.docs.filter((d) => d.id !== 'monster_001')
+        if (valid.length > 0) {
+          const d = valid[0]
+          setMonster({ id: d.id, ...d.data() } as Monster)
+          setPagePhase('selecting')
+        } else {
+          // 등록된 몬스터 없음 → 지도로 복귀
+          navigate('/map')
+        }
+      } catch {
+        navigate('/map')
       }
     }
-  }, [])
 
-  const handleCaptured = (caught: Monster) => {
-    // A의 보관함 저장 로그 출력
-    console.log('포획 성공 → 보관함 저장 필요:', caught.name)
+    loadMonster()
+  }, [navigate])
+
+  const saveToInventory = async (m: Monster) => {
+    if (isSaving.current) return
+    isSaving.current = true
+    const userId = getUserId()
+    try {
+      const q = query(
+        collection(db, 'user_inventory'),
+        where('userId',    '==', userId),
+        where('monsterId', '==', m.id),
+        where('isFused',   '==', false),
+      )
+      const snap = await getDocs(q)
+      if (!snap.empty) {
+        const ref      = snap.docs[0]
+        const newCount = (ref.data().count ?? 0) + 1
+        await updateDoc(doc(db, 'user_inventory', ref.id), { count: newCount })
+      } else {
+        await addDoc(collection(db, 'user_inventory'), {
+          userId,
+          monsterId:       m.id,
+          monsterName:     m.name,
+          category:        m.category,
+          monsterImageUrl: m.imageUrl,
+          imageUrl:        m.imageUrl,
+          shopId:          m.shopId,
+          shopName:        m.shopName,
+          count:           1,
+          isFused:         false,
+          capturedAt:      new Date(),
+        })
+      }
+    } catch (err) {
+      console.error('도감 저장 실패:', err)
+    } finally {
+      isSaving.current = false
+    }
   }
 
-  const handleClose = () => {
-    navigate('/map') // 닫으면 다시 지도로 안전하게 복귀
+  if (pagePhase === 'loading' || !monster) {
+    return (
+      <div
+        className="flex items-center justify-center bg-black"
+        style={{ position: 'fixed', top: 0, left: '50%', transform: 'translateX(-50%)', width: '100%', maxWidth: '28rem', height: '100vh', zIndex: 50 }}
+      >
+        <div className="w-10 h-10 border-4 border-amber-400 border-t-transparent rounded-full animate-spin" />
+      </div>
+    )
   }
-
-
-  
 
   return (
     <div
       className="overflow-hidden bg-black"
-      style={{
-        position: 'fixed',
-        top: 0,
-        left: '50%',
-        transform: 'translateX(-50%)',
-        width: '100%',
-        maxWidth: '28rem',
-        height: '100vh',
-        zIndex: 50,
-      }}
+      style={{ position: 'fixed', top: 0, left: '50%', transform: 'translateX(-50%)', width: '100%', maxWidth: '28rem', height: '100vh', zIndex: 50 }}
     >
-      {/* 카메라 배경 (A 제작) */}
       <CameraPreview />
 
-      {/* 포획 게임 레이어 */}
-      <CatchCanvas
-        monster={monster}
-        toolKey="basicNet"
-        onCaptured={handleCaptured}
-        onClose={handleClose}
-      />
+      {pagePhase === 'selecting' && (
+        <div className="absolute inset-0 z-10 flex flex-col justify-between pointer-events-none">
+          {/* 상단: 몬스터 미리보기 */}
+          <div className="pointer-events-auto p-5 flex items-center gap-3 bg-gradient-to-b from-black/70 to-transparent">
+            <div className="w-14 h-14 rounded-xl border border-amber-300 overflow-hidden bg-amber-50 shrink-0">
+              <img src={monster.imageUrl} alt={monster.name} className="w-full h-full object-contain" />
+            </div>
+            <div>
+              <p className="text-white font-black text-lg drop-shadow">{monster.name}</p>
+              <p className="text-amber-300 text-xs font-semibold">{monster.shopName} · {monster.category}</p>
+            </div>
+          </div>
+
+          {/* 하단: 도구 선택 */}
+          <div className="pointer-events-auto bg-gradient-to-t from-black/80 to-transparent pb-2 pt-6">
+            <p className="text-center text-white/80 text-xs mb-2">포획 도구를 선택하세요</p>
+            <ToolSelector selected={toolKey} onChange={setToolKey} />
+            <div className="px-4 pb-6">
+              <button
+                onClick={() => setPagePhase('catching')}
+                className="w-full py-3.5 rounded-2xl bg-gradient-to-r from-yellow-400 to-amber-500 text-gray-900 font-black text-base shadow-lg active:scale-95 transition-all"
+              >
+                🎯 포획 시작!
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {pagePhase === 'catching' && (
+        <CatchCanvas
+          monster={monster}
+          onCaptured={() => saveToInventory(monster)}
+          onClose={() => navigate('/map')}
+        />
+      )}
     </div>
   )
 }

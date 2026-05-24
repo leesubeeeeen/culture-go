@@ -11,12 +11,29 @@ export interface AppUser {
 export interface Monster {
   id: string
   shopId: string
+  shopName: string
   name: string
+  description?: string
+  attribute?: string
+  rarity?: 'common' | 'rare' | 'epic' | 'legendary'
   category: string
   lat: number
   lng: number
   status: 'approved' | 'pending'
   imageUrl: string
+  couponTemplateId?: string | null  // 상인이 쿠폰 등록 시 역참조로 기록
+}
+
+// couponTemplates 컬렉션 — 상인이 등록한 쿠폰 템플릿 (유저 쿠폰과 분리)
+export interface CouponTemplate {
+  id: string
+  shopId: string
+  shopName: string
+  monsterId: string  // Monster 컬렉션 문서 ID
+  title: string
+  benefit: string
+  category: string
+  createdAt: Date
 }
 
 // shops 컬렉션
@@ -44,13 +61,16 @@ export interface UserInventory {
   isFused: boolean // 융합 완료 후 true
 }
 
-// coupons 컬렉션
+// coupons 컬렉션 — 유저에게 발급된 쿠폰만 존재 (템플릿은 couponTemplates 컬렉션)
 export interface Coupon {
   id: string
   userId: string
+  monsterId: string    // 융합 대상 Monster 문서 ID
+  templateId: string | null  // 참조한 couponTemplates 문서 ID (템플릿 없이 발급 시 null)
   shopId: string
   shopName: string
   title: string
+  benefit: string      // 혜택 내용 (예: 아메리카노 1잔 무료)
   category: string
   isUsed: boolean
   createdAt: Date

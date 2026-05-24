@@ -7,13 +7,15 @@ import MerchantVerificationScreen from './MerchantVerificationScreen'
 import MonsterRequestScreen from '../components/MonsterRequestScreen'
 import QRScannerScreen from '../components/QRScannerScreen'
 import CouponDashboard from '../components/CouponDashboard'
+import CouponRegisterScreen from '../components/CouponRegisterScreen'
 
-type Tab = 'monster' | 'qr' | 'coupons'
+type Tab = 'monster' | 'qr' | 'coupons' | 'coupon-register'
 
 const TABS: { key: Tab; emoji: string; label: string }[] = [
-  { key: 'monster', emoji: '🐉', label: '몬스터 신청' },
-  { key: 'qr',      emoji: '📷', label: 'QR 스캔' },
-  { key: 'coupons', emoji: '🎟️', label: '쿠폰 현황' },
+  { key: 'monster',          emoji: '🐉', label: '몬스터 신청' },
+  { key: 'qr',              emoji: '📷', label: 'QR 스캔' },
+  { key: 'coupons',         emoji: '🎟️', label: '쿠폰 현황' },
+  { key: 'coupon-register', emoji: '🎫', label: '쿠폰 등록' },
 ]
 
 export default function MerchantDashboard() {
@@ -82,8 +84,11 @@ export default function MerchantDashboard() {
             lng={verification.lng}
           />
         )}
-        {tab === 'qr'      && <QRScannerScreen />}
-        {tab === 'coupons' && <CouponDashboard shopId={verification.shopId} />}
+        {tab === 'qr'              && <QRScannerScreen />}
+        {tab === 'coupons'         && <CouponDashboard shopId={verification.shopId} />}
+        {tab === 'coupon-register' && (
+          <CouponRegisterScreen shopId={verification.shopId} shopName={verification.shopName} />
+        )}
       </div>
     </div>
   )
