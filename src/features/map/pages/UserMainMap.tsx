@@ -9,7 +9,7 @@ const CNU_ENG_5 = { lat: 36.3667148, lng: 127.3443006 }
 export default function UserMainMap() {
   const navigate = useNavigate()
   const [monsters, setMonsters] = useState<Monster[]>([])
-  const [userLocation, setUserLocation] = useState(CNU_ENG_5) 
+  const [userLocation] = useState(CNU_ENG_5)
   const [selectedMonster, setSelectedMonster] = useState<Monster | null>(null)
 
   useEffect(() => {

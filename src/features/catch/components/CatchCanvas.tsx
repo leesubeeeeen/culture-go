@@ -30,11 +30,10 @@ interface Props {
 
 export default function CatchCanvas({
   monster,
-  toolKey = 'basicNet',
+  toolKey: _toolKey = 'basicNet',
   onCaptured,
   onClose,
 }: Props) {
-  const tool = TOOLS[toolKey]
   const [hp, setHp] = useState(DEFAULT_MAX_HP)
   const [phase, setPhase] = useState<Phase>('fighting')
   const [hits, setHits] = useState<{ id: number; x: number; y: number; dmg: number }[]>([])
